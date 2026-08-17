@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reel Splitter - AppADay 102</title>
+<meta name="description" content="Split an MP4 into smaller playable files, or strip out audio only, entirely in your browser. Nothing uploads anywhere.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@400;700;800&family=Archivo:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#17140F;
+  --bench:#221D16;
+  --bench2:#2C251B;
+  --edge:#3D3427;
+  --tape:#F2E9D8;
+  --dim:#9A8E7A;
+  --brass:#D8A13A;
+  --cyan:#57B8B0;
+  --red:#B3402F;
+  --strip:#0E0C09;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--ink);
+  color:var(--tape);
+  font-family:'Archivo',system-ui,sans-serif;
+  font-size:16px;
+  line-height:1.55;
+  min-height:100dvh;
+  -webkit-text-size-adjust:100%;
+}
+a{color:var(--brass);}
+.wrap{max-width:940px;margin:0 auto;padding:0 18px 64px;}
+
+/* ---------- header ---------- */
+.top{
+  display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  padding:18px 0 14px;border-bottom:1px solid var(--edge);flex-wrap:wrap;
+}
+.mark{display:flex;align-items:baseline;gap:10px;}
+.num{
+  font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.16em;
+  color:var(--brass);border:1px solid var(--brass);padding:3px 7px;
+}
+.mark h1{
+  font-family:'Big Shoulders Display',sans-serif;font-weight:800;
+  font-size:34px;line-height:.9;margin:0;letter-spacing:.02em;text-transform:uppercase;
+}
+.back{
+  font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;text-decoration:none;color:var(--dim);
+}
+.back:hover,.back:focus-visible{color:var(--brass);}
+
+.lede{
+  font-size:16px;color:var(--dim);max-width:60ch;margin:18px 0 26px;
+}
+.lede b{color:var(--tape);font-weight:600;}
+
+/* ---------- generic panel ---------- */
+.panel{
+  background:var(--bench);border:1px solid var(--edge);padding:18px;margin-bottom:18px;
+}
+.eyebrow{
+  font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--dim);margin:0 0 12px;
+}
+
+/* ---------- drop zone ---------- */
+.drop{
+  border:1px dashed var(--edge);background:var(--bench);
+  padding:44px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s;
+}
+.drop:hover,.drop.hot{border-color:var(--brass);background:var(--bench2);}
+.drop.slim{padding:14px 20px;}
+.drop.slim h2,.drop.slim p{display:none;}
+.drop.slim .cue{margin-top:0;}
+.drop h2{
+  font-family:'Big Shoulders Display',sans-serif;font-weight:700;text-transform:uppercase;
+  font-size:26px;margin:0 0 6px;letter-spacing:.03em;
+}
+.drop p{margin:0;color:var(--dim);font-size:14px;}
+.drop .cue{
+  display:inline-block;margin-top:16px;font-family:'Space Mono',monospace;font-size:12px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--brass);
+  border:1px solid var(--brass);padding:8px 16px;
+}
+#picker{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;}
+
+/* ---------- reel facts ---------- */
+.facts{display:flex;flex-wrap:wrap;margin:0;border:1px solid var(--edge);border-width:1px 0 0 1px;}
+.fact{flex:1 1 132px;background:var(--bench);padding:11px 13px;border-right:1px solid var(--edge);border-bottom:1px solid var(--edge);}
+.fact dt{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0 0 3px;}
+.fact dd{margin:0;font-family:'Space Mono',monospace;font-size:15px;color:var(--tape);word-break:break-word;}
+.fact dd.v{color:var(--brass);}
+.fact dd.a{color:var(--cyan);}
+.fname{
+  font-family:'Space Mono',monospace;font-size:13px;color:var(--tape);
+  margin:0 0 12px;word-break:break-all;
+}
+
+/* ---------- player ---------- */
+video{width:100%;display:block;background:#000;border:1px solid var(--edge);}
+
+/* ---------- film strip ---------- */
+.stripwrap{margin:20px 0 6px;}
+.strip{
+  position:relative;height:84px;background:var(--strip);
+  border-top:1px solid var(--edge);border-bottom:1px solid var(--edge);
+  cursor:crosshair;overflow:hidden;touch-action:none;
+}
+.strip::before,.strip::after{
+  content:"";position:absolute;left:0;right:0;height:11px;pointer-events:none;z-index:3;
+  background-image:repeating-linear-gradient(to right,
+    transparent 0 8px, #2A2318 8px 15px, transparent 15px 23px);
+  background-color:var(--strip);
+}
+.strip::before{top:0;}
+.strip::after{bottom:0;}
+.strip canvas{position:absolute;left:0;top:11px;width:100%;height:62px;display:block;z-index:1;}
+.cut{
+  position:absolute;top:0;bottom:0;width:0;border-left:2px solid var(--red);z-index:4;
+}
+.cut b{
+  position:absolute;top:14px;left:-9px;width:16px;height:16px;background:var(--red);
+  color:var(--strip);font-family:'Space Mono',monospace;font-size:11px;font-weight:700;
+  line-height:16px;text-align:center;cursor:pointer;
+}
+.play{position:absolute;top:0;bottom:0;width:0;border-left:1px solid var(--tape);z-index:5;pointer-events:none;}
+.ruler{
+  display:flex;justify-content:space-between;font-family:'Space Mono',monospace;
+  font-size:11px;color:var(--dim);padding-top:6px;letter-spacing:.05em;
+}
+.strip-help{font-size:13px;color:var(--dim);margin:2px 0 0;}
+
+/* ---------- controls ---------- */
+.rows{display:grid;gap:16px;}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+.row .lbl{
+  font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--dim);width:100%;
+}
+.seg{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--edge);}
+.seg button{
+  font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+  background:transparent;color:var(--dim);border:0;border-right:1px solid var(--edge);
+  padding:10px 14px;cursor:pointer;min-height:42px;
+}
+.seg button:last-child{border-right:0;}
+.seg button[aria-pressed="true"]{background:var(--brass);color:var(--ink);font-weight:700;}
+.seg button:hover:not([aria-pressed="true"]){color:var(--tape);background:var(--bench2);}
+.stepper{display:flex;align-items:center;border:1px solid var(--edge);}
+.stepper button{
+  background:transparent;border:0;color:var(--brass);font-size:20px;width:44px;height:44px;
+  cursor:pointer;font-family:'Space Mono',monospace;line-height:1;
+}
+.stepper button:hover{background:var(--bench2);}
+.stepper span{
+  font-family:'Space Mono',monospace;font-size:16px;min-width:64px;text-align:center;
+  color:var(--tape);
+}
+.hint{font-size:13px;color:var(--dim);margin:0;flex-basis:100%;}
+
+.go{
+  width:100%;margin-top:4px;background:var(--brass);color:var(--ink);border:0;
+  font-family:'Big Shoulders Display',sans-serif;font-weight:800;text-transform:uppercase;
+  font-size:24px;letter-spacing:.06em;padding:15px;cursor:pointer;min-height:56px;
+}
+.go:hover{background:#EEB559;}
+.go:disabled{background:var(--edge);color:var(--dim);cursor:default;}
+
+/* ---------- plan / results ---------- */
+table{width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:13px;}
+th{
+  text-align:left;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+  font-weight:400;padding:0 10px 8px 0;border-bottom:1px solid var(--edge);
+}
+td{padding:10px 10px 10px 0;border-bottom:1px solid var(--edge);vertical-align:middle;}
+tr:last-child td{border-bottom:0;}
+td.reel{color:var(--brass);font-weight:700;}
+td.sz{color:var(--dim);}
+.dl{
+  display:inline-block;font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--brass);border:1px solid var(--brass);
+  padding:7px 12px;text-decoration:none;white-space:nowrap;
+}
+.dl:hover{background:var(--brass);color:var(--ink);}
+.allbtn{
+  margin-top:14px;background:transparent;border:1px solid var(--edge);color:var(--tape);
+  font-family:'Space Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  padding:11px 16px;cursor:pointer;min-height:44px;
+}
+.allbtn:hover{border-color:var(--brass);color:var(--brass);}
+
+.note{
+  border-left:2px solid var(--cyan);padding:2px 0 2px 14px;margin:16px 0 0;
+  font-size:14px;color:var(--dim);
+}
+.note b{color:var(--cyan);font-weight:600;}
+.err{border-left-color:var(--red);}
+.err b{color:var(--red);}
+
+.hidden{display:none;}
+
+footer{
+  border-top:1px solid var(--edge);margin-top:34px;padding-top:16px;
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  font-family:'Space Mono',monospace;font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--dim);
+}
+footer a{text-decoration:none;color:var(--dim);}
+footer a:hover{color:var(--brass);}
+
+@media (max-width:560px){
+  .mark h1{font-size:27px;}
+  .strip{height:70px;}
+  .strip canvas{height:48px;}
+  th:nth-child(3),td:nth-child(3){display:none;}
+}
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important;animation:none !important;}
+}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="mark">
+      <span class="num">102</span>
+      <h1>Reel Splitter</h1>
+    </div>
+    <a class="back" href="https://augustineiacopelli.github.io/appaday/">AppADay Index</a>
+  </div>
+
+  <p class="lede">Cut a long <b>.mp4</b> into smaller playable files, or pull the audio out on its own. Every frame is copied byte for byte, so there is no re-encoding and no quality loss. The file never leaves this device.</p>
+
+  <div id="dropzone" class="drop" tabindex="0" role="button" aria-label="Choose an MP4 file">
+    <h2>Load a reel</h2>
+    <p>Drop an .mp4 here, or tap to pick one.</p>
+    <span class="cue">Choose file</span>
+  </div>
+  <input type="file" id="picker" accept="video/mp4,video/quicktime,.mp4,.m4v,.mov">
+  <p id="loadmsg" class="note hidden"></p>
+
+  <div id="stage" class="hidden">
+
+    <div class="panel">
+      <p class="eyebrow">Reel on the bench</p>
+      <p class="fname" id="fname"></p>
+      <dl class="facts" id="facts"></dl>
+    </div>
+
+    <div class="panel">
+      <p class="eyebrow">Cut points</p>
+      <video id="vid" controls preload="metadata" playsinline></video>
+      <div class="stripwrap">
+        <div class="strip" id="strip">
+          <canvas id="ticks" width="1600" height="124"></canvas>
+          <div class="play" id="playhead" style="left:0"></div>
+        </div>
+        <div class="ruler"><span id="r0">00:00</span><span id="r1"></span></div>
+      </div>
+      <p class="strip-help" id="striphelp">Amber marks are keyframes, the only places a clean cut can land. Tap the strip to add your own cut.</p>
+    </div>
+
+    <div class="panel">
+      <p class="eyebrow">Settings</p>
+      <div class="rows">
+        <div class="row">
+          <span class="lbl">How to divide it</span>
+          <div class="seg" id="modeseg">
+            <button type="button" data-mode="parts" aria-pressed="true">Equal parts</button>
+            <button type="button" data-mode="length" aria-pressed="false">By length</button>
+            <button type="button" data-mode="manual" aria-pressed="false">My cuts</button>
+          </div>
+        </div>
+        <div class="row" id="partsrow">
+          <span class="lbl">Number of parts</span>
+          <div class="stepper">
+            <button type="button" id="pminus" aria-label="Fewer parts">-</button>
+            <span id="partsval">4</span>
+            <button type="button" id="pplus" aria-label="More parts">+</button>
+          </div>
+        </div>
+        <div class="row hidden" id="lenrow">
+          <span class="lbl">Minutes per part</span>
+          <div class="stepper">
+            <button type="button" id="mminus" aria-label="Shorter parts">-</button>
+            <span id="minsval">15</span>
+            <button type="button" id="mplus" aria-label="Longer parts">+</button>
+          </div>
+        </div>
+        <div class="row hidden" id="manrow">
+          <span class="lbl">Your cuts</span>
+          <button type="button" class="allbtn" id="addcut">Cut at playhead</button>
+          <button type="button" class="allbtn" id="clearcuts">Clear all cuts</button>
+          <p class="hint">Scrub the video, then cut where you want. Cuts snap to the nearest keyframe.</p>
+        </div>
+        <div class="row">
+          <span class="lbl">What to keep</span>
+          <div class="seg" id="outseg">
+            <button type="button" data-out="both" aria-pressed="true">Video and audio</button>
+            <button type="button" data-out="audio" aria-pressed="false">Audio only</button>
+          </div>
+          <p class="hint" id="outhint">Audio only strips the picture and writes .m4a files, usually under a twentieth of the size. That is the fastest way under an upload limit when the words are all you need.</p>
+        </div>
+      </div>
+      <button type="button" class="go" id="go">Cut the reel</button>
+    </div>
+
+    <div class="panel">
+      <p class="eyebrow" id="planlabel">The plan</p>
+      <table>
+        <thead><tr><th>Reel</th><th>In</th><th>Out</th><th>Size</th><th></th></tr></thead>
+        <tbody id="plan"></tbody>
+      </table>
+      <button type="button" class="allbtn hidden" id="dlall">Download every part</button>
+      <p class="note hidden" id="resmsg"></p>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>AppADay 102 &middot; Utility</span>
+    <a href="https://augustineiacopelli.github.io/appaday/">augustineiacopelli.github.io/appaday</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   MP4 box reading
+   ============================================================ */
+
+function typeAt(u8, p){
+  return String.fromCharCode(u8[p], u8[p+1], u8[p+2], u8[p+3]);
+}
+
+function walk(u8, dv, start, end){
+  var out = [], p = start;
+  while (p + 8 <= end){
+    var size = dv.getUint32(p);
+    var type = typeAt(u8, p + 4);
+    var hdr = 8;
+    if (size === 1){
+      if (p + 16 > end) break;
+      size = Number(dv.getBigUint64(p + 8));
+      hdr = 16;
+    } else if (size === 0){
+      size = end - p;
+    }
+    if (size < hdr || p + size > end) break;
+    out.push({ type: type, start: p, end: p + size, data: p + hdr });
+    p += size;
+  }
+  return out;
+}
+
+function pick(list, type){
+  for (var i = 0; i < list.length; i++) if (list[i].type === type) return list[i];
+  return null;
+}
+
+function pickAny(list, types){
+  for (var i = 0; i < list.length; i++){
+    if (types.indexOf(list[i].type) !== -1) return list[i];
+  }
+  return null;
+}
+
+function raw(u8, b){
+  return u8.slice(b.start, b.end);
+}
+
+/* ============================================================
+   Sample table decoding
+   ============================================================ */
+
+function readTableCount(dv, dataStart){
+  return dv.getUint32(dataStart + 4);
+}
+
+function decodeSizes(u8, dv, stbl){
+  var b = pick(stbl, 'stsz');
+  if (b){
+    var uniform = dv.getUint32(b.data + 4);
+    var n = dv.getUint32(b.data + 8);
+    var out = new Uint32Array(n);
+    if (uniform > 0){
+      out.fill(uniform);
+    } else {
+      for (var i = 0; i < n; i++) out[i] = dv.getUint32(b.data + 12 + i * 4);
+    }
+    return out;
+  }
+  b = pick(stbl, 'stz2');
+  if (!b) return null;
+  var field = u8[b.data + 7];
+  var cnt = dv.getUint32(b.data + 8);
+  var res = new Uint32Array(cnt);
+  var q = b.data + 12;
+  for (var j = 0; j < cnt; j++){
+    if (field === 16) res[j] = dv.getUint16(q + j * 2);
+    else if (field === 8) res[j] = u8[q + j];
+    else {
+      var byteVal = u8[q + (j >> 1)];
+      res[j] = (j % 2 === 0) ? (byteVal >> 4) : (byteVal & 15);
+    }
+  }
+  return res;
+}
+
+function decodeChunkOffsets(dv, stbl){
+  var b = pick(stbl, 'stco');
+  var n, i, out;
+  if (b){
+    n = dv.getUint32(b.data + 4);
+    out = new Float64Array(n);
+    for (i = 0; i < n; i++) out[i] = dv.getUint32(b.data + 8 + i * 4);
+    return out;
+  }
+  b = pick(stbl, 'co64');
+  if (!b) return null;
+  n = dv.getUint32(b.data + 4);
+  out = new Float64Array(n);
+  for (i = 0; i < n; i++) out[i] = Number(dv.getBigUint64(b.data + 8 + i * 8));
+  return out;
+}
+
+function buildTrack(u8, dv, trak){
+  var trakKids = walk(u8, dv, trak.data, trak.end);
+  var tkhd = pick(trakKids, 'tkhd');
+  var mdia = pick(trakKids, 'mdia');
+  if (!tkhd || !mdia) return null;
+
+  /* encoder priming, carried in the source edit list */
+  var priming = 0;
+  var edts = pick(trakKids, 'edts');
+  if (edts){
+    var elst = pick(walk(u8, dv, edts.data, edts.end), 'elst');
+    if (elst && dv.getUint32(elst.data + 4) > 0){
+      priming = u8[elst.data] === 1 ? Number(dv.getBigInt64(elst.data + 16))
+                                    : dv.getInt32(elst.data + 12);
+      if (!(priming > 0)) priming = 0;
+    }
+  }
+
+  var mdiaKids = walk(u8, dv, mdia.data, mdia.end);
+  var mdhd = pick(mdiaKids, 'mdhd');
+  var hdlr = pick(mdiaKids, 'hdlr');
+  var minf = pick(mdiaKids, 'minf');
+  if (!mdhd || !hdlr || !minf) return null;
+
+  var mdVer = u8[mdhd.data];
+  var timescale, mediaDur;
+  if (mdVer === 1){
+    timescale = dv.getUint32(mdhd.data + 20);
+    mediaDur = Number(dv.getBigUint64(mdhd.data + 24));
+  } else {
+    timescale = dv.getUint32(mdhd.data + 12);
+    mediaDur = dv.getUint32(mdhd.data + 16);
+  }
+
+  var kind = typeAt(u8, hdlr.data + 8);
+
+  var minfKids = walk(u8, dv, minf.data, minf.end);
+  var mhd = pickAny(minfKids, ['vmhd', 'smhd', 'nmhd', 'sthd']);
+  var dinf = pick(minfKids, 'dinf');
+  var stblBox = pick(minfKids, 'stbl');
+  if (!stblBox) return null;
+
+  var stbl = walk(u8, dv, stblBox.data, stblBox.end);
+  var stsd = pick(stbl, 'stsd');
+  var sttsB = pick(stbl, 'stts');
+  var stscB = pick(stbl, 'stsc');
+  if (!stsd || !sttsB || !stscB) return null;
+
+  var sizes = decodeSizes(u8, dv, stbl);
+  var chunkOff = decodeChunkOffsets(dv, stbl);
+  if (!sizes || !chunkOff) return null;
+
+  var count = sizes.length;
+  if (count === 0) return null;
+
+  /* timing */
+  var dts = new Float64Array(count);
+  var dur = new Uint32Array(count);
+  var sEntries = dv.getUint32(sttsB.data + 4);
+  var t = 0, idx = 0, i, j;
+  for (i = 0; i < sEntries && idx < count; i++){
+    var c = dv.getUint32(sttsB.data + 8 + i * 8);
+    var d = dv.getUint32(sttsB.data + 12 + i * 8);
+    for (j = 0; j < c && idx < count; j++){
+      dts[idx] = t; dur[idx] = d; t += d; idx++;
+    }
+  }
+  while (idx < count){ dts[idx] = t; dur[idx] = 0; idx++; }
+
+  /* composition offsets */
+  var cttsB = pick(stbl, 'ctts');
+  var cto = null, cttsVer = 0;
+  if (cttsB){
+    cttsVer = u8[cttsB.data];
+    cto = new Int32Array(count);
+    var cEntries = dv.getUint32(cttsB.data + 4);
+    idx = 0;
+    for (i = 0; i < cEntries && idx < count; i++){
+      var cc = dv.getUint32(cttsB.data + 8 + i * 8);
+      var off = cttsVer === 1 ? dv.getInt32(cttsB.data + 12 + i * 8)
+                              : dv.getUint32(cttsB.data + 12 + i * 8);
+      for (j = 0; j < cc && idx < count; j++){ cto[idx] = off; idx++; }
+    }
+  }
+
+  /* sync samples */
+  var stssB = pick(stbl, 'stss');
+  var sync = null;
+  if (stssB){
+    sync = new Uint8Array(count);
+    var sc = dv.getUint32(stssB.data + 4);
+    for (i = 0; i < sc; i++){
+      var num = dv.getUint32(stssB.data + 8 + i * 4) - 1;
+      if (num >= 0 && num < count) sync[num] = 1;
+    }
+  }
+
+  /* file offsets via stsc */
+  var offs = new Float64Array(count);
+  var scCount = dv.getUint32(stscB.data + 4);
+  var sc1 = new Uint32Array(scCount), sc2 = new Uint32Array(scCount);
+  for (i = 0; i < scCount; i++){
+    sc1[i] = dv.getUint32(stscB.data + 8 + i * 12);
+    sc2[i] = dv.getUint32(stscB.data + 12 + i * 12);
+  }
+  var s = 0;
+  for (i = 0; i < scCount && s < count; i++){
+    var firstChunk = sc1[i] - 1;
+    var perChunk = sc2[i];
+    var lastChunk = (i + 1 < scCount) ? sc1[i + 1] - 1 : chunkOff.length;
+    for (var ch = firstChunk; ch < lastChunk && s < count; ch++){
+      if (ch >= chunkOff.length) break;
+      var running = chunkOff[ch];
+      for (j = 0; j < perChunk && s < count; j++){
+        offs[s] = running;
+        running += sizes[s];
+        s++;
+      }
+    }
+  }
+
+  return {
+    kind: kind,
+    count: count,
+    off: offs, size: sizes, dts: dts, dur: dur,
+    cto: cto, cttsVer: cttsVer, sync: sync,
+    timescale: timescale, mediaDur: mediaDur, priming: priming,
+    tkhd: raw(u8, tkhd),
+    mdhd: raw(u8, mdhd),
+    hdlr: raw(u8, hdlr),
+    mhd: mhd ? raw(u8, mhd) : null,
+    dinf: dinf ? raw(u8, dinf) : null,
+    stsd: raw(u8, stsd),
+    codec: typeAt(u8, stsd.data + 12),
+    entryStart: stsd.data + 8
+  };
+}
+
+function parseMoov(bytes){
+  var u8 = bytes;
+  var dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  var kids = walk(u8, dv, 0, u8.length);
+  var mvhd = pick(kids, 'mvhd');
+  if (!mvhd) throw new Error('This file has no movie header, so it cannot be read as an MP4.');
+  var ver = u8[mvhd.data];
+  var mvTimescale = ver === 1 ? dv.getUint32(mvhd.data + 20) : dv.getUint32(mvhd.data + 12);
+  var tracks = [];
+  for (var i = 0; i < kids.length; i++){
+    if (kids[i].type !== 'trak') continue;
+    var tr = buildTrack(u8, dv, kids[i]);
+    if (tr) tracks.push(tr);
+  }
+  return { timescale: mvTimescale, mvhd: raw(u8, mvhd), tracks: tracks };
+}
+
+/* ============================================================
+   Box writing
+   ============================================================ */
+
+function box(type, parts){
+  var len = 8, i;
+  for (i = 0; i < parts.length; i++) len += parts[i].length;
+  var out = new Uint8Array(len);
+  new DataView(out.buffer).setUint32(0, len);
+  for (i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+  var p = 8;
+  for (i = 0; i < parts.length; i++){ out.set(parts[i], p); p += parts[i].length; }
+  return out;
+}
+
+function ftypBox(audioOnly){
+  var brands = audioOnly ? ['M4A ', 'mp42', 'isom'] : ['isom', 'iso2', 'mp41', 'avc1'];
+  var major = audioOnly ? 'M4A ' : 'isom';
+  var p = new Uint8Array(8 + brands.length * 4);
+  var dv = new DataView(p.buffer);
+  var i, k;
+  for (i = 0; i < 4; i++) p[i] = major.charCodeAt(i);
+  dv.setUint32(4, 512);
+  for (k = 0; k < brands.length; k++){
+    for (i = 0; i < 4; i++) p[8 + k * 4 + i] = brands[k].charCodeAt(i);
+  }
+  return box('ftyp', [p]);
+}
+
+function pairTable(type, version, pairs){
+  /* pairs is a flat array of count,value,count,value ... */
+  var n = pairs.length / 2;
+  var p = new Uint8Array(8 + n * 8);
+  var dv = new DataView(p.buffer);
+  p[0] = version;
+  dv.setUint32(4, n);
+  for (var i = 0; i < n; i++){
+    dv.setUint32(8 + i * 8, pairs[i * 2]);
+    if (version === 1 && type === 'ctts') dv.setInt32(12 + i * 8, pairs[i * 2 + 1]);
+    else dv.setUint32(12 + i * 8, pairs[i * 2 + 1]);
+  }
+  return box(type, [p]);
+}
+
+function runLength(arr, s, e){
+  var pairs = [], last = null, cnt = 0;
+  for (var i = s; i <= e; i++){
+    var v = arr[i];
+    if (v === last){ cnt++; }
+    else { if (cnt > 0){ pairs.push(cnt, last); } last = v; cnt = 1; }
+  }
+  if (cnt > 0) pairs.push(cnt, last);
+  return pairs;
+}
+
+function stszBox(sizes, s, e){
+  var n = e - s + 1;
+  var p = new Uint8Array(12 + n * 4);
+  var dv = new DataView(p.buffer);
+  dv.setUint32(8, n);
+  for (var i = 0; i < n; i++) dv.setUint32(12 + i * 4, sizes[s + i]);
+  return box('stsz', [p]);
+}
+
+function stssBox(sync, s, e){
+  var nums = [];
+  for (var i = s; i <= e; i++) if (sync[i]) nums.push(i - s + 1);
+  if (!nums.length) nums.push(1);
+  var p = new Uint8Array(8 + nums.length * 4);
+  var dv = new DataView(p.buffer);
+  dv.setUint32(4, nums.length);
+  for (var j = 0; j < nums.length; j++) dv.setUint32(8 + j * 4, nums[j]);
+  return box('stss', [p]);
+}
+
+function stscBox(perChunk){
+  var entries = [], last = -1;
+  for (var i = 0; i < perChunk.length; i++){
+    if (perChunk[i] !== last){ entries.push(i + 1, perChunk[i], 1); last = perChunk[i]; }
+  }
+  var n = entries.length / 3;
+  var p = new Uint8Array(8 + n * 12);
+  var dv = new DataView(p.buffer);
+  dv.setUint32(4, n);
+  for (var k = 0; k < n; k++){
+    dv.setUint32(8 + k * 12, entries[k * 3]);
+    dv.setUint32(12 + k * 12, entries[k * 3 + 1]);
+    dv.setUint32(16 + k * 12, entries[k * 3 + 2]);
+  }
+  return box('stsc', [p]);
+}
+
+function co64Box(offsets){
+  var p = new Uint8Array(8 + offsets.length * 8);
+  var dv = new DataView(p.buffer);
+  dv.setUint32(4, offsets.length);
+  for (var i = 0; i < offsets.length; i++){
+    dv.setBigUint64(8 + i * 8, BigInt(Math.round(offsets[i])));
+  }
+  return box('co64', [p]);
+}
+
+function edtsBox(segDur, mediaTime){
+  var p = new Uint8Array(20);
+  var dv = new DataView(p.buffer);
+  dv.setUint32(4, 1);
+  dv.setUint32(8, Math.max(0, Math.round(segDur)));
+  dv.setInt32(12, Math.round(mediaTime));
+  dv.setUint16(16, 1);
+  return box('edts', [box('elst', [p])]);
+}
+
+function patchDur(src, kind, value){
+  var out = src.slice(0);
+  var dv = new DataView(out.buffer, out.byteOffset, out.byteLength);
+  var ver = out[8];
+  var pos;
+  if (kind === 'mvhd') pos = ver === 1 ? 32 : 24;
+  else if (kind === 'tkhd') pos = ver === 1 ? 36 : 28;
+  else pos = ver === 1 ? 32 : 24;
+  if (ver === 1) dv.setBigUint64(pos, BigInt(Math.max(0, Math.round(value))));
+  else dv.setUint32(pos, Math.max(0, Math.min(4294967295, Math.round(value))));
+  return out;
+}
+
+/* ============================================================
+   Segment planning
+   ============================================================ */
+
+function lowerBound(arr, count, value){
+  var lo = 0, hi = count;
+  while (lo < hi){
+    var mid = (lo + hi) >> 1;
+    if (arr[mid] < value) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+/* Group a sample range into chunks that span at most `span` seconds. */
+function groupChunks(tr, s, e, span){
+  var groups = [];
+  var i = s, ts = tr.timescale;
+  while (i <= e){
+    var startT = tr.dts[i] / ts;
+    var j = i;
+    while (j + 1 <= e && (tr.dts[j + 1] / ts) - startT < span) j++;
+    groups.push({ s: i, e: j, t: startT });
+    i = j + 1;
+  }
+  return groups;
+}
+
+function buildSegment(movie, ranges, audioOnly){
+  /* ranges: array of { tr, s, e } in output order */
+  var i, k, g;
+
+  /* interleave chunk groups by time */
+  var all = [];
+  for (i = 0; i < ranges.length; i++){
+    var gs = groupChunks(ranges[i].tr, ranges[i].s, ranges[i].e, 0.5);
+    for (k = 0; k < gs.length; k++){
+      gs[k].ti = i;
+      all.push(gs[k]);
+    }
+  }
+  all.sort(function(a, b){ return a.t - b.t || a.ti - b.ti; });
+
+  /* assign byte layout */
+  var byteRanges = [];
+  var perTrackChunks = [];
+  for (i = 0; i < ranges.length; i++) perTrackChunks.push({ counts: [], offsets: [] });
+  var cursor = 0;
+  for (k = 0; k < all.length; k++){
+    g = all[k];
+    var tr = ranges[g.ti].tr;
+    perTrackChunks[g.ti].counts.push(g.e - g.s + 1);
+    perTrackChunks[g.ti].offsets.push(cursor);
+    for (i = g.s; i <= g.e; i++){
+      byteRanges.push(tr.off[i], tr.size[i]);
+      cursor += tr.size[i];
+    }
+  }
+  var mdatSize = cursor;
+
+  /* build trak boxes */
+  function makeTraks(base){
+    var traks = [];
+    var maxMovieDur = 0;
+    for (var ri = 0; ri < ranges.length; ri++){
+      var t = ranges[ri].tr, s = ranges[ri].s, e = ranges[ri].e;
+      var skip = ranges[ri].skip || 0;
+      var totalDur = 0;
+      for (var q = s; q <= e; q++) totalDur += t.dur[q];
+      var secs = (totalDur - skip) / t.timescale;
+      if (secs > maxMovieDur) maxMovieDur = secs;
+
+      var stbl = [ t.stsd, pairTable('stts', 0, runLength(t.dur, s, e)) ];
+
+      if (t.cto){
+        var minOff = t.cto[s];
+        for (var m = s; m <= e; m++) if (t.cto[m] < minOff) minOff = t.cto[m];
+        var shifted = new Int32Array(e - s + 1);
+        for (var n2 = 0; n2 <= e - s; n2++) shifted[n2] = t.cto[s + n2] - minOff;
+        stbl.push(pairTable('ctts', t.cttsVer, runLength(shifted, 0, e - s)));
+      }
+      if (t.sync) stbl.push(stssBox(t.sync, s, e));
+
+      var offs = perTrackChunks[ri].offsets.map(function(o){ return o + base; });
+      stbl.push(stscBox(perTrackChunks[ri].counts));
+      stbl.push(stszBox(t.size, s, e));
+      stbl.push(co64Box(offs));
+
+      var minfKids = [];
+      if (t.mhd) minfKids.push(t.mhd);
+      if (t.dinf) minfKids.push(t.dinf);
+      minfKids.push(box('stbl', stbl));
+
+      var mdia = box('mdia', [
+        patchDur(t.mdhd, 'mdhd', totalDur),
+        t.hdlr,
+        box('minf', minfKids)
+      ]);
+      var trakKids = [ patchDur(t.tkhd, 'tkhd', secs * movie.timescale) ];
+      if (skip > 0) trakKids.push(edtsBox(secs * movie.timescale, skip));
+      trakKids.push(mdia);
+      traks.push(box('trak', trakKids));
+    }
+    return { traks: traks, movieDur: maxMovieDur };
+  }
+
+  /* two passes: sizes are identical, only offset values change */
+  var pass1 = makeTraks(0);
+  var moovParts1 = [ patchDur(movie.mvhd, 'mvhd', pass1.movieDur * movie.timescale) ].concat(pass1.traks);
+  var moov1 = box('moov', moovParts1);
+
+  var ftyp = ftypBox(audioOnly);
+  var base = ftyp.length + moov1.length + 16;
+
+  var pass2 = makeTraks(base);
+  var moovParts2 = [ patchDur(movie.mvhd, 'mvhd', pass2.movieDur * movie.timescale) ].concat(pass2.traks);
+  var moov = box('moov', moovParts2);
+
+  if (moov.length !== moov1.length) throw new Error('Internal layout mismatch while writing the file.');
+
+  var mdatHead = new Uint8Array(16);
+  var mh = new DataView(mdatHead.buffer);
+  mh.setUint32(0, 1);
+  mdatHead[4] = 109; mdatHead[5] = 100; mdatHead[6] = 97; mdatHead[7] = 116; /* mdat */
+  mh.setBigUint64(8, BigInt(mdatSize + 16));
+
+  return {
+    head: [ftyp, moov, mdatHead],
+    byteRanges: byteRanges,
+    payload: mdatSize,
+    total: base + mdatSize,
+    duration: pass2.movieDur
+  };
+}
+
+function assemble(file, seg){
+  var parts = [seg.head[0], seg.head[1], seg.head[2]];
+  var br = seg.byteRanges;
+  var i = 0;
+  while (i < br.length){
+    var start = br[i], len = br[i + 1];
+    i += 2;
+    while (i < br.length && br[i] === start + len){ len += br[i + 1]; i += 2; }
+    parts.push(file.slice(start, start + len));
+  }
+  return new Blob(parts, { type: 'video/mp4' });
+}
+
+/* ============================================================
+   App state
+   ============================================================ */
+
+var file = null, movie = null, vTrack = null, aTrack = null;
+var keyTimes = [], duration = 0;
+var mode = 'parts', parts = 4, mins = 15, outMode = 'both';
+var manualCuts = [];
+var plan = [], previewUrl = null, segUrls = [];
+
+var $ = function(id){ return document.getElementById(id); };
+
+function tc(sec){
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  var h = Math.floor(sec / 3600);
+  var m = Math.floor((sec % 3600) / 60);
+  var s = Math.floor(sec % 60);
+  var two = function(v){ return (v < 10 ? '0' : '') + v; };
+  return (h > 0 ? h + ':' : '') + two(m) + ':' + two(s);
+}
+
+function mb(bytes){
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(2) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+
+function say(el, html, isErr){
+  el.innerHTML = html;
+  el.className = 'note' + (isErr ? ' err' : '');
+}
+
+function dropSegUrls(){
+  for (var i = 0; i < segUrls.length; i++){
+    try { URL.revokeObjectURL(segUrls[i]); } catch (e) {}
+  }
+  segUrls = [];
+}
+
+/* ---------- load ---------- */
+
+async function findMoov(f){
+  var pos = 0, size = f.size, ftypFound = false;
+  while (pos < size){
+    var head = new Uint8Array(await f.slice(pos, Math.min(pos + 16, size)).arrayBuffer());
+    if (head.length < 8) break;
+    var dv = new DataView(head.buffer);
+    var s = dv.getUint32(0);
+    var t = typeAt(head, 4);
+    var hdr = 8;
+    if (s === 1){
+      if (head.length < 16) break;
+      s = Number(dv.getBigUint64(8));
+      hdr = 16;
+    } else if (s === 0){
+      s = size - pos;
+    }
+    if (t === 'ftyp') ftypFound = true;
+    if (t === 'moov') return { start: pos + hdr, end: pos + s, sawFtyp: ftypFound };
+    if (s < hdr) break;
+    pos += s;
+  }
+  return null;
+}
+
+async function load(f){
+  var msg = $('loadmsg');
+  msg.className = 'note';
+  msg.textContent = 'Reading ' + f.name + '.';
+  $('stage').className = 'hidden';
+
+  try {
+    var loc = await findMoov(f);
+    if (!loc) throw new Error('No MP4 index found in this file. Reel Splitter reads .mp4, .m4v and .mov. WebM and MKV will not work.');
+    if (loc.end - loc.start > 220 * 1024 * 1024) throw new Error('The index in this file is unusually large and will not fit in memory.');
+
+    var moovBytes = new Uint8Array(await f.slice(loc.start, loc.end).arrayBuffer());
+    var mv = parseMoov(moovBytes);
+
+    var v = null, a = null;
+    for (var i = 0; i < mv.tracks.length; i++){
+      if (mv.tracks[i].kind === 'vide' && !v) v = mv.tracks[i];
+      else if (mv.tracks[i].kind === 'soun' && !a) a = mv.tracks[i];
+    }
+    if (!v && !a) throw new Error('This file has no video or audio track that can be copied.');
+
+    file = f; movie = mv; vTrack = v; aTrack = a;
+
+    keyTimes = [];
+    if (v){
+      for (var k = 0; k < v.count; k++){
+        if (!v.sync || v.sync[k]) keyTimes.push(v.dts[k] / v.timescale);
+      }
+      if (!keyTimes.length) keyTimes.push(0);
+    }
+
+    duration = 0;
+    for (i = 0; i < mv.tracks.length; i++){
+      var d = mv.tracks[i].mediaDur / mv.tracks[i].timescale;
+      if (d > duration) duration = d;
+    }
+    if (!(duration > 0)) throw new Error('This file reports no duration, so it cannot be divided.');
+
+    manualCuts = [];
+    if (!v) { outMode = 'audio'; }
+    if (parts > 1 && duration / parts < 1) parts = Math.max(2, Math.floor(duration));
+
+    showReel();
+    msg.className = 'note hidden';
+  } catch (err){
+    say(msg, '<b>Cannot read that file.</b> ' + (err && err.message ? err.message : 'Unknown problem.'), true);
+    file = null; movie = null;
+  }
+}
+
+/* ---------- reel facts and strip ---------- */
+
+function showReel(){
+  $('fname').textContent = file.name;
+
+  var rows = [];
+  rows.push(['Length', tc(duration), '']);
+  rows.push(['File size', mb(file.size), '']);
+  if (vTrack){
+    var fps = vTrack.count / (vTrack.mediaDur / vTrack.timescale);
+    var dv = new DataView(vTrack.stsd.buffer, vTrack.stsd.byteOffset, vTrack.stsd.byteLength);
+    var w = dv.getUint16(48), h = dv.getUint16(50);
+    rows.push(['Picture', vTrack.codec + ' ' + w + 'x' + h, 'v']);
+    rows.push(['Frames', vTrack.count.toLocaleString() + ' at ' + fps.toFixed(0) + 'fps', 'v']);
+    var gop = keyTimes.length > 1 ? (duration / keyTimes.length) : duration;
+    rows.push(['Keyframes', keyTimes.length.toLocaleString() + ' every ' + gop.toFixed(1) + 's', 'v']);
+  } else {
+    rows.push(['Picture', 'none', '']);
+  }
+  if (aTrack){
+    var adv = new DataView(aTrack.stsd.buffer, aTrack.stsd.byteOffset, aTrack.stsd.byteLength);
+    var chans = adv.getUint16(40);
+    var rate = adv.getUint16(48);
+    var abytes = 0;
+    for (var i = 0; i < aTrack.count; i++) abytes += aTrack.size[i];
+    rows.push(['Sound', aTrack.codec + ' ' + chans + 'ch ' + rate + 'Hz', 'a']);
+    rows.push(['Audio only', mb(abytes), 'a']);
+  } else {
+    rows.push(['Sound', 'none', '']);
+  }
+
+  var dl = $('facts');
+  while (dl.firstChild) dl.removeChild(dl.firstChild);
+  for (var r = 0; r < rows.length; r++){
+    var cell = document.createElement('div');
+    cell.className = 'fact';
+    var dt = document.createElement('dt');
+    dt.textContent = rows[r][0];
+    var dd = document.createElement('dd');
+    dd.textContent = rows[r][1];
+    if (rows[r][2]) dd.className = rows[r][2];
+    cell.appendChild(dt); cell.appendChild(dd);
+    dl.appendChild(cell);
+  }
+
+  var vid = $('vid');
+  dropSegUrls();
+  if (previewUrl){ try { URL.revokeObjectURL(previewUrl); } catch (e) {} }
+  previewUrl = URL.createObjectURL(file);
+  vid.src = previewUrl;
+
+  $('r1').textContent = tc(duration);
+  $('stage').className = '';
+  var dzEl = $('dropzone');
+  dzEl.className = 'drop slim';
+  dzEl.querySelector('.cue').textContent = 'Load a different reel';
+
+  if (!vTrack) setOut('audio');
+  syncControls();
+  drawStrip();
+  refreshPlan();
+}
+
+function drawStrip(){
+  var cv = $('ticks');
+  var ctx = cv.getContext ? cv.getContext('2d') : null;
+  if (!ctx) return;
+  var w = cv.width, h = cv.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#0E0C09';
+  ctx.fillRect(0, 0, w, h);
+
+  /* audio presence band */
+  if (aTrack){
+    ctx.fillStyle = 'rgba(87,184,176,0.30)';
+    ctx.fillRect(0, h - 22, w, 12);
+  }
+
+  /* keyframe ticks */
+  if (keyTimes.length){
+    ctx.fillStyle = 'rgba(216,161,58,0.55)';
+    var step = Math.max(1, Math.ceil(keyTimes.length / 900));
+    for (var i = 0; i < keyTimes.length; i += step){
+      var x = Math.round((keyTimes[i] / duration) * w);
+      ctx.fillRect(x, 14, 1, h - 46);
+    }
+  } else {
+    ctx.fillStyle = 'rgba(242,233,216,0.18)';
+    for (var m = 0; m < w; m += 6) ctx.fillRect(m, 14, 1, h - 46);
+  }
+
+  /* minute rules */
+  ctx.fillStyle = 'rgba(242,233,216,0.22)';
+  var interval = duration > 3600 ? 600 : (duration > 600 ? 300 : 60);
+  for (var t = interval; t < duration; t += interval){
+    var mx = Math.round((t / duration) * w);
+    ctx.fillRect(mx, 0, 1, h);
+  }
+
+  paintCuts();
+}
+
+function paintCuts(){
+  var strip = $('strip');
+  var old = strip.querySelectorAll('.cut');
+  for (var i = 0; i < old.length; i++) strip.removeChild(old[i]);
+  var cuts = currentCuts();
+  for (var k = 0; k < cuts.length; k++){
+    var d = document.createElement('div');
+    d.className = 'cut';
+    d.style.left = ((cuts[k] / duration) * 100) + '%';
+    if (mode === 'manual'){
+      var x = document.createElement('b');
+      x.textContent = 'x';
+      x.title = 'Remove this cut';
+      x.setAttribute('data-t', String(cuts[k]));
+      d.appendChild(x);
+    }
+    strip.appendChild(d);
+  }
+}
+
+/* ---------- cut math ---------- */
+
+function snap(t){
+  if (outMode === 'audio' || !vTrack || !keyTimes.length) return t;
+  var best = keyTimes[0], bd = Math.abs(t - best);
+  var lo = 0, hi = keyTimes.length - 1;
+  while (lo <= hi){
+    var mid = (lo + hi) >> 1;
+    var d = Math.abs(keyTimes[mid] - t);
+    if (d < bd){ bd = d; best = keyTimes[mid]; }
+    if (keyTimes[mid] < t) lo = mid + 1; else hi = mid - 1;
+  }
+  return best;
+}
+
+function currentCuts(){
+  var raws = [], i;
+  if (mode === 'parts'){
+    for (i = 1; i < parts; i++) raws.push(duration * i / parts);
+  } else if (mode === 'length'){
+    var step = mins * 60;
+    for (var t = step; t < duration - 0.5; t += step) raws.push(t);
+  } else {
+    raws = manualCuts.slice();
+  }
+  var snapped = [];
+  for (i = 0; i < raws.length; i++){
+    var s = snap(raws[i]);
+    if (s > 0.05 && s < duration - 0.05 && snapped.indexOf(s) === -1) snapped.push(s);
+  }
+  snapped.sort(function(a, b){ return a - b; });
+  return snapped;
+}
+
+function rangeFor(tr, t0, t1, isKeyed){
+  var s, e;
+  if (isKeyed){
+    s = lowerBound(tr.dts, tr.count, t0 * tr.timescale - 0.5);
+    e = lowerBound(tr.dts, tr.count, t1 * tr.timescale - 0.5) - 1;
+  } else {
+    s = lowerBound(tr.dts, tr.count, t0 * tr.timescale - 0.5);
+    e = lowerBound(tr.dts, tr.count, t1 * tr.timescale - 0.5) - 1;
+  }
+  if (s < 0) s = 0;
+  if (e >= tr.count) e = tr.count - 1;
+  if (e < s) return null;
+  return { tr: tr, s: s, e: e };
+}
+
+function buildPlan(){
+  var cuts = currentCuts();
+  var edges = [0].concat(cuts, [duration]);
+  var audioOnly = (outMode === 'audio' || !vTrack);
+  var out = [];
+  for (var i = 0; i < edges.length - 1; i++){
+    var t0 = edges[i], t1 = edges[i + 1];
+    if (t1 - t0 < 0.05) continue;
+    var ranges = [];
+    if (!audioOnly && vTrack){
+      var vr = rangeFor(vTrack, t0, t1, true);
+      if (vr) ranges.push(vr);
+    }
+    if (aTrack){
+      var ar = rangeFor(aTrack, t0, t1, false);
+      if (ar){
+        /* AAC needs the frame before the cut to reconstruct the first one */
+        if (ar.s === 0){
+          ar.skip = aTrack.priming || 0;
+        } else {
+          var primers = Math.min(2, ar.s), skip = 0;
+          for (var z = 1; z <= primers; z++) skip += aTrack.dur[ar.s - z];
+          ar.s -= primers;
+          ar.skip = skip;
+        }
+        ranges.push(ar);
+      }
+    }
+    if (!ranges.length) continue;
+    var bytes = 0;
+    for (var r = 0; r < ranges.length; r++){
+      for (var q = ranges[r].s; q <= ranges[r].e; q++) bytes += ranges[r].tr.size[q];
+    }
+    out.push({ t0: t0, t1: t1, ranges: ranges, bytes: bytes, audioOnly: audioOnly });
+  }
+  return out;
+}
+
+function baseName(){
+  var n = file.name.replace(/\.[^.]+$/, '');
+  return n.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 60) || 'reel';
+}
+
+function refreshPlan(){
+  if (!file) return;
+  plan = buildPlan();
+  var tb = $('plan');
+  while (tb.firstChild) tb.removeChild(tb.firstChild);
+  var audioOnly = (outMode === 'audio' || !vTrack);
+  for (var i = 0; i < plan.length; i++){
+    var tr = document.createElement('tr');
+    var cells = [
+      ['reel', pad(i + 1)],
+      ['', tc(plan[i].t0)],
+      ['', tc(plan[i].t1)],
+      ['sz', mb(plan[i].bytes)],
+      ['', '']
+    ];
+    for (var c = 0; c < cells.length; c++){
+      var td = document.createElement('td');
+      if (cells[c][0]) td.className = cells[c][0];
+      td.textContent = cells[c][1];
+      tr.appendChild(td);
+    }
+    tb.appendChild(tr);
+  }
+  $('planlabel').textContent = plan.length + (plan.length === 1 ? ' part' : ' parts') +
+    (audioOnly ? ', audio only' : '');
+  $('dlall').className = 'allbtn hidden';
+  $('resmsg').className = 'note hidden';
+  $('go').disabled = plan.length === 0;
+  paintCuts();
+}
+
+function pad(n){ return (n < 10 ? '0' : '') + n; }
+
+/* ---------- cutting ---------- */
+
+function cut(){
+  if (!file || !plan.length) return;
+  var msg = $('resmsg');
+  var tb = $('plan');
+  var audioOnly = (outMode === 'audio' || !vTrack);
+  var ext = audioOnly ? '.m4a' : '.mp4';
+  var base = baseName();
+  var made = 0, total = 0;
+  dropSegUrls();
+
+  try {
+    for (var i = 0; i < plan.length; i++){
+      var seg = buildSegment(movie, plan[i].ranges, audioOnly);
+      var blob = assemble(file, seg);
+      var url = URL.createObjectURL(blob);
+      segUrls.push(url);
+      var name = base + '-' + pad(i + 1) + ext;
+
+      var row = tb.rows[i];
+      if (!row) continue;
+      row.cells[3].textContent = mb(blob.size);
+      var cell = row.cells[4];
+      while (cell.firstChild) cell.removeChild(cell.firstChild);
+      var a = document.createElement('a');
+      a.className = 'dl';
+      a.href = url;
+      a.download = name;
+      a.textContent = 'Save';
+      cell.appendChild(a);
+      made++; total += blob.size;
+    }
+    $('dlall').className = 'allbtn';
+    say(msg, '<b>' + made + ' file' + (made === 1 ? '' : 's') + ' ready, ' + mb(total) +
+      ' in total.</b> Nothing was uploaded. Saving is the only step left.', false);
+  } catch (err){
+    say(msg, '<b>The cut failed.</b> ' + (err && err.message ? err.message : 'Unknown problem.'), true);
+  }
+}
+
+function downloadAll(){
+  var links = $('plan').querySelectorAll('a.dl');
+  var i = 0;
+  var tick = function(){
+    if (i >= links.length) return;
+    links[i].click();
+    i++;
+    setTimeout(tick, 700);
+  };
+  tick();
+}
+
+/* ---------- controls ---------- */
+
+function setMode(m){
+  mode = m;
+  var btns = $('modeseg').querySelectorAll('button');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-mode') === m ? 'true' : 'false');
+  }
+  syncControls();
+  refreshPlan();
+}
+
+function setOut(o){
+  outMode = o;
+  var btns = $('outseg').querySelectorAll('button');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-out') === o ? 'true' : 'false');
+  }
+  refreshPlan();
+}
+
+function syncControls(){
+  $('partsrow').className = mode === 'parts' ? 'row' : 'row hidden';
+  $('lenrow').className = mode === 'length' ? 'row' : 'row hidden';
+  $('manrow').className = mode === 'manual' ? 'row' : 'row hidden';
+  $('partsval').textContent = String(parts);
+  $('minsval').textContent = String(mins);
+  var help = $('striphelp');
+  if (!vTrack){
+    help.textContent = 'This file has no picture track, so cuts land on exact times.';
+  } else if (mode === 'manual'){
+    help.textContent = 'Tap the strip to cut there. Tap a red marker to drop that cut.';
+  } else {
+    help.textContent = 'Amber marks are keyframes, the only places a clean cut can land. Tap to scrub.';
+  }
+}
+
+function addCut(t){
+  if (!file) return;
+  t = Math.max(0.1, Math.min(duration - 0.1, t));
+  if (mode !== 'manual') setMode('manual');
+  for (var i = 0; i < manualCuts.length; i++){
+    if (Math.abs(manualCuts[i] - t) < 0.4) return;
+  }
+  manualCuts.push(t);
+  refreshPlan();
+}
+
+/* ---------- wiring ---------- */
+
+var dz = $('dropzone'), picker = $('picker');
+
+dz.addEventListener('click', function(){ picker.click(); });
+dz.addEventListener('keydown', function(e){
+  if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); picker.click(); }
+});
+picker.addEventListener('change', function(){
+  if (picker.files && picker.files[0]) load(picker.files[0]);
+});
+['dragenter', 'dragover'].forEach(function(ev){
+  dz.addEventListener(ev, function(e){ e.preventDefault(); dz.className = 'drop hot'; });
+});
+['dragleave', 'drop'].forEach(function(ev){
+  dz.addEventListener(ev, function(e){ e.preventDefault(); dz.className = 'drop'; });
+});
+dz.addEventListener('drop', function(e){
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+});
+
+$('modeseg').addEventListener('click', function(e){
+  var b = e.target.closest ? e.target.closest('button') : null;
+  if (b && b.getAttribute('data-mode')) setMode(b.getAttribute('data-mode'));
+});
+$('outseg').addEventListener('click', function(e){
+  var b = e.target.closest ? e.target.closest('button') : null;
+  if (!b || !b.getAttribute('data-out')) return;
+  if (b.getAttribute('data-out') === 'both' && !vTrack) return;
+  setOut(b.getAttribute('data-out'));
+});
+
+$('pminus').addEventListener('click', function(){ if (parts > 2){ parts--; syncControls(); refreshPlan(); } });
+$('pplus').addEventListener('click', function(){ if (parts < 60){ parts++; syncControls(); refreshPlan(); } });
+$('mminus').addEventListener('click', function(){ if (mins > 1){ mins = mins > 5 ? mins - 5 : mins - 1; syncControls(); refreshPlan(); } });
+$('mplus').addEventListener('click', function(){ if (mins < 240){ mins = mins >= 5 ? mins + 5 : mins + 1; syncControls(); refreshPlan(); } });
+
+$('addcut').addEventListener('click', function(){ addCut($('vid').currentTime || 0); });
+$('clearcuts').addEventListener('click', function(){ manualCuts = []; refreshPlan(); });
+
+$('strip').addEventListener('click', function(e){
+  if (!file) return;
+  var target = e.target;
+  if (target && target.tagName === 'B'){
+    var t = parseFloat(target.getAttribute('data-t'));
+    manualCuts = manualCuts.filter(function(c){ return Math.abs(snap(c) - t) > 0.001; });
+    refreshPlan();
+    return;
+  }
+  var r = this.getBoundingClientRect();
+  var frac = (e.clientX - r.left) / r.width;
+  var time = Math.max(0, Math.min(1, frac)) * duration;
+  try { $('vid').currentTime = time; } catch (err) {}
+  if (mode === 'manual') addCut(time);
+});
+
+$('vid').addEventListener('timeupdate', function(){
+  if (!duration) return;
+  $('playhead').style.left = (($('vid').currentTime / duration) * 100) + '%';
+});
+
+$('go').addEventListener('click', cut);
+$('dlall').addEventListener('click', downloadAll);
+
+window.addEventListener('resize', function(){ if (file) drawStrip(); });
+
+})();
+</script>
+</body>
+</html>
